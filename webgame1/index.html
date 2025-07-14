@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>命运画廊</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .game-container {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            transition: all 0.5s ease;
+        }
+
+        .game-container.fullscreen {
+            max-width: 100%;
+            height: 100vh;
+            gap: 0;
+        }
+
+        /* 游戏画框部分 */
+        .game-frame {
+            position: relative;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 3px solid #ffd700;
+            transition: all 0.5s ease;
+        }
+
+        .game-frame.fullscreen {
+            border-radius: 0;
+            border: none;
+            box-shadow: none;
+            height: 100vh;
+        }
+
+        /* 16:9 比例容器 */
+        .game-frame::before {
+            content: '';
+            display: block;
+            padding-top: 56.25%; /* 16:9 比例 (9/16 = 0.5625) */
+        }
+
+        .game-frame.fullscreen::before {
+            display: none;
+        }
+
+        .game-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            transition: all 0.5s ease;
+        }
+
+        .game-frame.fullscreen .game-content {
+            position: relative;
+        }
+
+        /* 游戏内容区域 */
+        .story-area {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .story-image, .story-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .story-video {
+            background: #000;
+        }
+
+        /* 图片加载失败时的样式 */
+        .story-image.error {
+            display: none;
+        }
+
+        /* 旁白文字样式 */
+        .narration-text {
+            position: absolute;
+            top: 8%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.55);
+            color: #fff;
+            font-size: 1.6rem;
+            font-weight: bold;
+            padding: 0.5em 2em;
+            border-radius: 0.3em;
+            text-align: center;
+            z-index: 15;
+            pointer-events: none;
+            letter-spacing: 0.05em;
+            max-width: 80%;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            user-select: none;
+        }
+
+        /* 返回按钮样式 */
+        .back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            z-index: 1000;
+            opacity: 0;
+            transform: translateX(-50px);
+            transition: all 0.3s ease;
+            display: none;
+        }
+
+        .back-btn.show {
+            opacity: 1;
+            transform: translateX(0);
+            display: block;
+        }
+
+        .back-btn:hover {
+            background: rgba(0, 0, 0, 0.9);
+        }
+
+        /* 横屏提示样式 */
+        .landscape-prompt {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .landscape-prompt.show {
+            display: flex;
+        }
+
+        .landscape-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: rotate 2s ease-in-out infinite;
+        }
+
+        @keyframes rotate {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
+        }
+
+        .landscape-text {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .landscape-subtext {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+
+        .start-overlay {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            background: rgba(0,0,0,0.25);
+            z-index: 20;
+            transition: opacity 0.3s;
+        }
+        .start-overlay.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .start-btn {
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            font-size: 2.2rem;
+            border: none;
+            border-radius: 0;
+            padding: 0.6em 2em;
+            cursor: pointer;
+            box-shadow: none;
+            outline: none;
+            letter-spacing: 0.1em;
+            font-family: inherit;
+            font-weight: bold;
+            transition: background 0.2s;
+            margin-bottom: 8%;
+        }
+        .start-btn:active {
+            background: rgba(0,0,0,0.9);
+        }
+
+        /* 移动端横屏样式 */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .game-container {
+                max-width: 100%;
+                gap: 15px;
+            }
+            
+            .game-title h1 {
+                font-size: 2rem;
+                margin-bottom: 5px;
+            }
+            
+            .game-title .subtitle {
+                font-size: 0.9rem;
+            }
+            
+            .story-area {
+                padding: 20px;
+            }
+            
+            .choices-area {
+                padding: 15px 20px;
+            }
+            
+            .choice-btn {
+                padding: 10px 20px;
+                font-size: 1rem;
+                min-width: 150px;
+            }
+        }
+
+        /* 移动端竖屏样式 */
+        @media (max-width: 768px) and (orientation: portrait) {
+            .game-title h1 {
+                font-size: 2.5rem;
+            }
+            
+            .choices-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .choice-btn {
+                min-width: 250px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .game-title h1 {
+                font-size: 2rem;
+            }
+            
+            .story-area {
+                padding: 20px;
+            }
+            
+            .choices-area {
+                padding: 20px;
+            }
+        }
+        .branch-buttons {
+            position: absolute;
+            left: 50%;
+            bottom: 8%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 2.5em;
+            z-index: 20;
+        }
+        .branch-btn {
+            background: linear-gradient(90deg, #a80000 0%, #d32f2f 100%);
+            opacity: 0.92;
+            color: #fff;
+            font-size: 1.3rem;
+            border: none;
+            border-radius: 0.5em;
+            padding: 0.5em 2em;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            box-shadow: none;
+            outline: none;
+            letter-spacing: 0.05em;
+            transition: background 0.2s, opacity 0.2s;
+        }
+        .branch-btn:active {
+            opacity: 1;
+            background: linear-gradient(90deg, #d32f2f 0%, #a80000 100%);
+        }
+        #videoControls {
+            position: absolute;
+            right: 2.5%;
+            bottom: 3%;
+            display: flex;
+            gap: 0.5em;
+            z-index: 50;
+        }
+        .vc-btn {
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 2.5em;
+            height: 2.5em;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .vc-btn:active {
+            background: rgba(0,0,0,0.95);
+        }
+    </style>
+</head>
+<body>
+    <!-- 横屏提示 -->
+    <div class="landscape-prompt" id="landscapePrompt">
+        <div class="landscape-icon">📱</div>
+        <div class="landscape-text">请旋转设备至横屏模式</div>
+        <div class="landscape-subtext">为了获得最佳游戏体验</div>
+    </div>
+
+    <!-- 返回按钮 -->
+    <button class="back-btn" id="backBtn">← 返回</button>
+
+    <div class="game-container">
+        <!-- 游戏画框部分 -->
+        <div class="game-frame">
+            <div class="game-content">
+                <!-- 故事内容区域 -->
+                <div class="story-area">
+                    <img src="images/1.png" alt="游戏场景" class="story-image" id="storyImage" style="display:block;">
+                    <div class="start-overlay" id="startOverlay" style="z-index:30;">
+                        <button class="start-btn" id="startBtn">点击开始</button>
+                    </div>
+                    <video class="story-video" id="storyVideo" style="display:none;" playsinline></video>
+                    <div class="narration-text" id="narrationText" style="display:none;"></div>
+                    <div class="branch-buttons" id="branchButtons" style="display:none;"></div>
+                    <div id="videoControls" style="display:none;">
+                        <button class="vc-btn" id="vcPlayPause">⏯</button>
+                        <button class="vc-btn" id="vcRewind">⏪</button>
+                        <button class="vc-btn" id="vcForward">⏩</button>
+                        <button class="vc-btn" id="vcSpeed">1.5x</button>
+                    </div>
+                </div>
+
+                <!-- 选择按钮区域 -->
+                
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 游戏状态管理
+        let gameStarted = false;
+        let isMobile = false;
+        let currentNode = 'start';
+        let currentImageIndex = 0;
+        let imageSwitchInterval = null;
+
+        // 剧情节点数据结构
+        const storyNodes = {
+            'start': {
+                media: [
+                { type: 'video', src: 'images/视频1.mp4', text: '' }
+                ],
+                nextNode: 'prologue0',
+                choices: null
+            },
+            'prologue0': {
+                media: [
+                    { type: 'image', src: 'images/3.png', text: '' },
+                    { type: 'video', src: 'images/视频1.1.mp4', text: '' }
+
+                ],
+                nextNode:'prologue',
+                choices: null
+            },
+            'prologue': {
+                media: [
+
+                    { type: 'image', src: 'images/4.png', text: '请选择要穿越的瞬间（编号从左往右）' }
+                ],
+                nextNode:null,
+                choices: [
+                    { text: '画幅一', next: 'chapter1' },
+                    { text: '画幅二', next: 'chapter2' },
+                    { text: '画幅三', next: 'chapter3' },
+                    { text: '画幅四', next: 'chapter4' },
+                    { text: '画幅五', next: 'chapter5' }
+                ]
+            },
+            'chapter1': {
+                media: [
+                { type: 'video', src: 'images/视频1.2.1.mp4', text: '' },
+                { type: 'image', src: 'images/5.png', text: '你将穿越到这个时刻' }
+                ],
+                nextNode: null,
+                choices: [
+                    { text: '未完待续', next: 'TBC' },
+                    { text: '重新选择', next: 'prologue' }
+                ]
+            },
+            'chapter2': {
+                media: [
+                    { type: 'video', src: 'images/视频1.2.2.mp4', text: '' },
+                    { type: 'image', src: 'images/6.png', text: '你将穿越到这个时刻' }
+                ],
+                nextNode: null,
+                choices: [
+                    { text: '未完待续', next: 'TBC' },
+                    { text: '重新选择', next: 'prologue' }
+                ]
+            },
+            'chapter3': {
+                media: [
+                    { type: 'video', src: 'images/视频1.2.3.mp4', text: '' },
+                    { type: 'image', src: 'images/7.png', text: '你将穿越到这个时刻' }
+                ],
+                nextNode: null,
+                choices: [
+                    { text: '未完待续', next: 'TBC' },
+                    { text: '重新选择', next: 'prologue' }
+                ]
+            },
+            'chapter4': {
+                media: [
+                    { type: 'video', src: 'images/视频1.2.4.mp4', text: '' },
+                    { type: 'image', src: 'images/8.png', text: '你将穿越到这个时刻' }
+                ],
+                nextNode: null,
+                choices: [
+                    { text: '未完待续', next: 'TBC' },
+                    { text: '重新选择', next: 'prologue' }
+                ]
+            },
+            'chapter5': {
+                media: [
+                    { type: 'video', src: 'images/视频1.2.5.mp4', text: '' },
+                    { type: 'image', src: 'images/9.png', text: '你将穿越到这个时刻' }
+                ],
+                nextNode: null,
+                choices: [
+                    { text: '未完待续', next: 'TBC' },
+                    { text: '重新选择', next: 'prologue' }
+                ]
+            },
+            'TBC': {
+                media: [
+                    { type: 'image', src: 'images/1.png', text: '未完待续' }
+                ],
+                nextNode: null,
+                choices: [
+                    { text: '未完待续', next: 'TBC' },
+                    { text: '重新开始', next: 'prologue' }
+                ]
+            }
+        };
+
+        // 检测是否为移动设备
+        function detectMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+
+        // 检测屏幕方向
+        function getOrientation() {
+            return window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+        }
+
+        // 显示/隐藏横屏提示
+        function toggleLandscapePrompt() {
+            const prompt = document.getElementById('landscapePrompt');
+            const isPortrait = getOrientation() === 'portrait';
+            
+            if (isMobile && gameStarted && isPortrait) {
+                prompt.classList.add('show');
+            } else {
+                prompt.classList.remove('show');
+            }
+        }
+
+        // 初始化
+        function init() {
+            isMobile = detectMobile();
+            console.log('游戏界面已加载');
+            console.log('设备类型:', isMobile ? '移动端' : '桌面端');
+            console.log('当前方向:', getOrientation());
+
+            // 监听屏幕方向变化
+            window.addEventListener('orientationchange', function() {
+                setTimeout(toggleLandscapePrompt, 100);
+            });
+
+            // 监听窗口大小变化
+            window.addEventListener('resize', function() {
+                toggleLandscapePrompt();
+            });
+
+            // 添加返回按钮事件
+            const backBtn = document.getElementById('backBtn');
+            if (backBtn) {
+                backBtn.addEventListener('click', exitFullscreen);
+            }
+        }
+
+        // 开始游戏
+        function startGame() {
+            gameStarted = true;
+            loadCurrentNode();
+        }
+
+        // 开始剧情
+        function startStory() {
+            console.log('开始剧情');
+            currentNode = 'start';
+            currentImageIndex = 0;
+            loadCurrentNode();
+        }
+
+        // 渲染分支按钮
+        function renderBranchButtons(choices) {
+            const branchButtons = document.getElementById('branchButtons');
+            branchButtons.innerHTML = '';
+            if (!choices || !Array.isArray(choices) || choices.length === 0) {
+                branchButtons.style.display = 'none';
+                return;
+            }
+            choices.forEach((choice, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'branch-btn';
+                btn.textContent = choice.text;
+                btn.onclick = function() {
+                    currentNode = choice.next;
+                    loadCurrentNode();
+                };
+                branchButtons.appendChild(btn);
+            });
+            branchButtons.style.display = 'flex';
+        }
+
+        // 加载当前节点
+        function loadCurrentNode() {
+            const node = storyNodes[currentNode];
+            const branchButtons = document.getElementById('branchButtons');
+            if (!node) {
+                console.log('剧情结束');
+                return;
+            }
+            // 分支按钮先隐藏并清空
+            if (branchButtons) {
+                branchButtons.style.display = 'none';
+                branchButtons.innerHTML = '';
+            }
+
+            // 停止之前的媒体切换
+            if (imageSwitchInterval) {
+                clearTimeout(imageSwitchInterval);
+            }
+
+            // 显示第一个媒体和旁白
+            currentImageIndex = 0;
+            showMedia(node.media[0]);
+
+            // 自动切换媒体逻辑
+            if (node.media.length > 1) {
+                if (node.choices && node.choices.length > 0) {
+                    startMediaSwitchWithChoices(node.media, node.choices);
+                } else {
+                    startMediaSwitch(node.media);
+                }
+            } else {
+                // 单个媒体
+                if (node.choices && node.choices.length > 0) {
+                    // 立即显示分支按钮
+                    renderBranchButtons(node.choices);
+                } else if (node.nextNode) {
+                    imageSwitchInterval = setTimeout(() => {
+                        nextNode();
+                    }, 3000);
+                }
+            }
+        }
+
+        // 多媒体节点且有choices，全部显示完后再显示分支按钮
+        function startMediaSwitchWithChoices(mediaArr, choices) {
+            let index = 0;
+            function showNext() {
+                index++;
+                if (index < mediaArr.length) {
+                    showMedia(mediaArr[index]);
+                    if (mediaArr[index].type === 'video') {
+                        const storyVideo = document.getElementById('storyVideo');
+                        if (storyVideo) {
+                            storyVideo.onended = function() {
+                                showNext();
+                            };
+                        }
+                    } else {
+                        imageSwitchInterval = setTimeout(showNext, 3000);
+                    }
+                } else {
+                    // 停留在最后一个，立即显示分支按钮
+                    renderBranchButtons(choices);
+                }
+            }
+            // 首个媒体
+            showMedia(mediaArr[0]);
+            if (mediaArr[0].type === 'video') {
+                const storyVideo = document.getElementById('storyVideo');
+                if (storyVideo) {
+                    storyVideo.onended = function() {
+                        showNext();
+                    };
+                }
+            } else {
+                imageSwitchInterval = setTimeout(showNext, 3000);
+            }
+        }
+        // 多媒体节点无choices
+        function startMediaSwitch(mediaArr) {
+            let index = 0;
+            function showNext() {
+                index++;
+                if (index < mediaArr.length) {
+                    showMedia(mediaArr[index]);
+                    if (mediaArr[index].type === 'video') {
+                        const storyVideo = document.getElementById('storyVideo');
+                        if (storyVideo) {
+                            storyVideo.onended = function() {
+                                showNext();
+                            };
+                        }
+                    } else {
+                        imageSwitchInterval = setTimeout(showNext, 3000);
+                    }
+                } else {
+                    // 所有媒体显示完毕，3秒后进入下一节点
+                    imageSwitchInterval = setTimeout(() => {
+                        nextNode();
+                    }, 3000);
+                }
+            }
+            // 首个媒体
+            showMedia(mediaArr[0]);
+            if (mediaArr[0].type === 'video') {
+                const storyVideo = document.getElementById('storyVideo');
+                if (storyVideo) {
+                    storyVideo.onended = function() {
+                        showNext();
+                    };
+                }
+            } else {
+                imageSwitchInterval = setTimeout(showNext, 3000);
+            }
+        }
+
+        // 显示媒体和旁白
+        function showMedia(mediaObj) {
+            const storyImage = document.getElementById('storyImage');
+            const storyVideo = document.getElementById('storyVideo');
+            const narrationText = document.getElementById('narrationText');
+            const videoControls = document.getElementById('videoControls');
+            if (mediaObj.type === 'image') {
+                if (storyImage) {
+                    storyImage.src = mediaObj.src;
+                    storyImage.style.display = 'block';
+                }
+                if (storyVideo) {
+                    storyVideo.pause();
+                    storyVideo.style.display = 'none';
+                }
+                if (videoControls) videoControls.style.display = 'none';
+            } else if (mediaObj.type === 'video') {
+                if (storyImage) {
+                    storyImage.style.display = 'none';
+                }
+                if (storyVideo) {
+                    storyVideo.src = mediaObj.src;
+                    storyVideo.style.display = 'block';
+                    storyVideo.muted = false;
+                    storyVideo.autoplay = true;
+                    storyVideo.controls = false;
+                    storyVideo.currentTime = 0;
+                    storyVideo.play();
+                }
+                if (videoControls) videoControls.style.display = 'flex';
+            }
+            if (narrationText) {
+                if (mediaObj.text && mediaObj.text.trim() !== '') {
+                    narrationText.textContent = mediaObj.text;
+                    narrationText.style.display = 'block';
+                } else {
+                    narrationText.style.display = 'none';
+                }
+            }
+        }
+
+        // 进入下一节点
+        function nextNode() {
+            const node = storyNodes[currentNode];
+            if (node && node.nextNode) {
+                currentNode = node.nextNode;
+                loadCurrentNode();
+            } else {
+                console.log('剧情结束');
+                // 可以在这里添加结束逻辑
+            }
+        }
+
+        // 退出全屏
+        function exitFullscreen() {
+            const gameContainer = document.querySelector('.game-container');
+            const gameFrame = document.querySelector('.game-frame');
+            const backBtn = document.getElementById('backBtn');
+            
+            // 停止图片切换
+            if (imageSwitchInterval) {
+                clearInterval(imageSwitchInterval);
+                imageSwitchInterval = null;
+            }
+            
+            // 重置游戏状态
+            currentNode = 'start';
+            currentImageIndex = 0;
+            
+            // 移除全屏类
+            gameContainer.classList.remove('fullscreen');
+            gameFrame.classList.remove('fullscreen');
+            backBtn.classList.remove('show');
+            
+            gameStarted = false;
+            console.log('退出全屏模式');
+        }
+
+        // 处理图片加载
+        function handleImageLoad() {
+            const storyImage = document.getElementById('storyImage');
+            if (storyImage) {
+                storyImage.addEventListener('load', function() {
+                    console.log('默认图片加载成功');
+                });
+                
+                storyImage.addEventListener('error', function() {
+                    console.log('默认图片加载失败，隐藏图片');
+                    this.classList.add('error');
+                });
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            init();
+            handleImageLoad();
+            // 叠加"点击开始"按钮逻辑
+            const startOverlay = document.getElementById('startOverlay');
+            const startBtn = document.getElementById('startBtn');
+            if (startBtn && startOverlay) {
+                startBtn.addEventListener('click', function() {
+                    startOverlay.classList.add('hide');
+                    gameStarted = true;
+                    startGame();
+                });
+            }
+            // 视频控制按钮事件
+            const storyVideo = document.getElementById('storyVideo');
+            const vcPlayPause = document.getElementById('vcPlayPause');
+            const vcRewind = document.getElementById('vcRewind');
+            const vcForward = document.getElementById('vcForward');
+            const vcSpeed = document.getElementById('vcSpeed');
+            if (vcPlayPause && storyVideo) {
+                vcPlayPause.addEventListener('click', function() {
+                    if (storyVideo.paused) {
+                        storyVideo.play();
+                    } else {
+                        storyVideo.pause();
+                    }
+                });
+            }
+            if (vcRewind && storyVideo) {
+                vcRewind.addEventListener('click', function() {
+                    storyVideo.currentTime = Math.max(0, storyVideo.currentTime - 5);
+                });
+            }
+            if (vcForward && storyVideo) {
+                vcForward.addEventListener('click', function() {
+                    storyVideo.currentTime = Math.min(storyVideo.duration, storyVideo.currentTime + 5);
+                });
+            }
+            if (vcSpeed && storyVideo) {
+                vcSpeed.addEventListener('click', function() {
+                    if (storyVideo.playbackRate === 1.5) {
+                        storyVideo.playbackRate = 1.0;
+                        vcSpeed.textContent = '1x';
+                    } else {
+                        storyVideo.playbackRate = 1.5;
+                        vcSpeed.textContent = '1.5x';
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html> 
